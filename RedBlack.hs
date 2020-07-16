@@ -47,8 +47,16 @@ pattern ZRB l x z = ZB Rgt x l z
 pattern ZLR x r z = ZR Lft x r z
 pattern ZRR l x z = ZR Rgt x l z
 
-
 data AZipper a = forall n color. AZ (RedBlackTree n color a) (RBTZipper n color a)
+
+withDir :: (a -> b -> a -> c) -> Direction -> a -> b -> a -> c
+withDir f Lft = f
+withDir f Rgt = \ l x r -> f r x l
+
+red :: Direction -> RedBlackTree n 'B a -> a -> RedBlackTree n 'B a -> RedBlackTree n 'R a
+red = withDir Red
+-- black :: Direction -> RedBlackTree n leftColor a -> a -> RedBlackTree n rightColor a -> RedBlackTree ('S n) 'B a
+-- black = withDir Black
 
 fromZipper :: RedBlackTree n c a -> RBTZipper n c a -> RedBlackTree'' a
 fromZipper l Tip = RBT l
@@ -95,23 +103,43 @@ stepDown x0 (AZ (Black l x r) z)
 -- stepDown x z@(AZ (Black _ y _) _) | x < y = goLeft z | otherwise = goRight z
 
 loopTillLeft :: (a -> Either b a) -> a -> b  
-loopTillLeft f x = either id (loopTillLeft f) $ f x
+-- loopTillLeft f x = either id (loopTillLeft f) $ f x
+loopTillLeft f = go where go = either id go . f
 
 findBottom :: Ord a => a -> RedBlackTree n 'B a -> RBTZipper 'Z 'B a
 findBottom x = loopTillLeft (stepDown x) . mkAZipper
 
+-- A "BadZipper" is a red node with a zipper chain that wants a black node
 data BadZipper a = forall n. BZ (RedBlackTree n 'R a) (RBTZipper n 'B a)
 
+mkBad :: a -> RBTZipper 'Z 'B a -> BadZipper a
+mkBad a z = BZ (Red Nil a Nil) z
+
+-- Cases from here: https://en.wikipedia.org/wiki/Red%E2%80%93black_tree#Insertion
+
 tryInsert :: RedBlackTree n 'R a -> RBTZipper n 'B a -> Either (AZipper a) (BadZipper a)
-tryInsert l Tip = Left $ AZ (turnBlack l) Tip
-tryInsert l (ZB d x r z) = Left $ AZ l (ZB d x r z)
-tryInsert l (ZLR x r (ZLB x1 r1@(Red {}) z)) =
+tryInsert l Tip = Left $ AZ (turnBlack l) Tip -- Case 1
+tryInsert l (ZB d x r z) = Left $ AZ l (ZB d x r z) -- Case 2
+tryInsert l (ZLR x r (ZLB x1 r1@(Red {}) z)) = -- Case 3
   let l' = Black l x r
       r' = turnBlack r1
       node = Red l' x1 r'
       in Right $ BZ node z
-tryInsert n1 (ZLR x2 n3 (ZLB x4 n5@(Black {}) z)) = 
+tryInsert n1 (ZLR x2 n3 (ZLB x4 n5@(Black {}) z)) = -- Case 4b
       Left $ AZ (Black n1 x2 (Red n3 x4 n5)) z
+-- Todo:
+-- * Case 4a
+-- * Mirrored versions
+
+
+tryInsert' :: BadZipper a -> Either (AZipper a) (BadZipper a)
+tryInsert' (BZ l a) = tryInsert l a
+
+repairBad :: BadZipper a -> AZipper a
+repairBad = loopTillLeft tryInsert'
+
+insert :: Ord a => a -> RedBlackTree' a -> RedBlackTree'' a
+insert x = fromZipper' . repairBad . mkBad x . findBottom x
 
 -- insert :: Ord a => a -> RedBlackTree n 'B a -> RedBlackTree ('S n) 'B a
 -- insert x Nil = Black Nil x Nil

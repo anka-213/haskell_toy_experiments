@@ -48,6 +48,15 @@ rotateR (Node (Node ll llb y lrb lr) _lb x rb r) = Node ll llb y (cmpTrans lrb r
 rotateR x = x
 
 
+fromList :: Ord a => [a] -> UnboundedTree a
+fromList = foldr insert Leaf
+
+-- Node (Node (Node Leaf _ 3 _ (Node (Node Leaf _ 3 _ Leaf) _ 4 _ Leaf))
+--            _ 5 _
+--            (Node Leaf _ 5 _ Leaf))
+--       _ 6 _ 
+--      (Node (Node Leaf _ 7 _ Leaf) _ 8 _ Leaf)
+
 -- data RedBlackTree count (color :: Color) a where
 --     Nil :: RedBlackTree 'Z 'B a
 --     Red :: RedBlackTree n 'B a -> a -> RedBlackTree n 'B a -> RedBlackTree n 'R a
