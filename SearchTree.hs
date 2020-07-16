@@ -34,18 +34,17 @@ pattern Nyde a lb rb l r = Node l lb a rb r
 
 insert :: Ord a => a -> UnboundedTree a -> UnboundedTree a
 insert x = name x \nx -> insert' nx cmpNegInfty cmpInfinity
--- insert x Leaf = name x $ \nx -> Nyde nx cmpNegInfty cmpInfinity Leaf Leaf
 
 insert' :: Ord a => Named l a -> Smaller lb l -> Smaller l rb -> SearchTree lb rb a -> SearchTree lb rb a
 insert' x lb rb Leaf = Node Leaf lb x rb Leaf
-insert' x lb rb (Nyde y lb' rb' l r) = case compareNamed x y of
+insert' x lb rb (Node l lb' y rb' r) = case compareNamed x y of
     Left ans -> Node (insert' x lb ans l) lb' y rb' r
     Right ans -> Node l lb' y rb' (insert' x ans rb r)
 
 
 -- rotate
 rotateR :: SearchTree lb rb a -> SearchTree lb rb a
-rotateR (Nyde x _lb rb (Nyde y llb lrb ll lr) r) = Node ll llb y (cmpTrans lrb rb) (Node lr lrb x rb r)
+rotateR (Node (Node ll llb y lrb lr) _lb x rb r) = Node ll llb y (cmpTrans lrb rb) (Node lr lrb x rb r)
 rotateR x = x
 
 
