@@ -37,15 +37,15 @@ insert x = name x \nx -> insert' nx cmpNegInfty cmpInfinity
 -- insert x Leaf = name x $ \nx -> Node nx cmpNegInfty cmpInfinity Leaf Leaf
 
 insert' :: Ord a => Named l a -> Smaller lb l -> Smaller l rb -> SearchTree lb rb a -> SearchTree lb rb a
-insert' x lb rb Leaf = Node x lb rb Leaf Leaf
+insert' x lb rb Leaf = Node' Leaf lb x rb Leaf
 insert' x lb rb (Node y lb' rb' l r) = case compareNamed x y of
-    Left ans -> Node y lb' rb' (insert' x lb ans l) r
-    Right ans -> Node y lb' rb' l (insert' x ans rb r)
+    Left ans -> Node' (insert' x lb ans l) lb' y rb' r
+    Right ans -> Node' l lb' y rb' (insert' x ans rb r)
 
 
 -- rotate
 rotateR :: SearchTree lb rb a -> SearchTree lb rb a
-rotateR (Node x _lb rb (Node y llb lrb ll lr) r) = Node y llb (cmpTrans lrb rb) ll (Node x lrb rb lr r)
+rotateR (Node x _lb rb (Node y llb lrb ll lr) r) = Node' ll llb y (cmpTrans lrb rb) (Node' lr lrb x rb r)
 rotateR x = x
 
 
