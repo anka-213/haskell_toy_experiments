@@ -35,12 +35,18 @@ data Direction = Lft | Rgt
 
 data RBTZipper count color a where
     Tip :: RBTZipper count 'B a
-    -- ZB :: Direction -> a -> RedBlackTree n rightColor a -> RBTZipper ('S n) 'B a -> RBTZipper n leftColor a
-    -- ZR :: Direction -> a -> RedBlackTree n 'B a -> RBTZipper n 'R a -> RBTZipper n 'B a
-    ZLB :: a -> RedBlackTree n rightColor a -> RBTZipper ('S n) 'B a -> RBTZipper n leftColor a
-    ZLR :: a -> RedBlackTree n 'B a -> RBTZipper n 'R a -> RBTZipper n 'B a
-    ZRB :: RedBlackTree n leftColor a -> a -> RBTZipper ('S n) 'B a -> RBTZipper n rightColor a
-    ZRR :: RedBlackTree n 'B a -> a -> RBTZipper n 'R a -> RBTZipper n 'B a
+    ZB :: Direction -> a -> RedBlackTree n rightColor a -> RBTZipper ('S n) 'B a -> RBTZipper n leftColor a
+    ZR :: Direction -> a -> RedBlackTree n 'B a -> RBTZipper n 'R a -> RBTZipper n 'B a
+    -- ZLB :: a -> RedBlackTree n rightColor a -> RBTZipper ('S n) 'B a -> RBTZipper n leftColor a
+    -- ZLR :: a -> RedBlackTree n 'B a -> RBTZipper n 'R a -> RBTZipper n 'B a
+    -- ZRB :: RedBlackTree n leftColor a -> a -> RBTZipper ('S n) 'B a -> RBTZipper n rightColor a
+    -- ZRR :: RedBlackTree n 'B a -> a -> RBTZipper n 'R a -> RBTZipper n 'B a
+
+pattern ZLB x r z = ZB Lft x r z
+pattern ZRB l x z = ZB Rgt x l z
+pattern ZLR x r z = ZR Lft x r z
+pattern ZRR l x z = ZR Rgt x l z
+
 
 data AZipper a = forall n color. AZ (RedBlackTree n color a) (RBTZipper n color a)
 
@@ -98,13 +104,14 @@ data BadZipper a = forall n. BZ (RedBlackTree n 'R a) (RBTZipper n 'B a)
 
 tryInsert :: RedBlackTree n 'R a -> RBTZipper n 'B a -> Either (AZipper a) (BadZipper a)
 tryInsert l Tip = Left $ AZ (turnBlack l) Tip
-tryInsert l (ZLB x r z) = Left $ AZ l (ZLB x r z)
+tryInsert l (ZB d x r z) = Left $ AZ l (ZB d x r z)
 tryInsert l (ZLR x r (ZLB x1 r1@(Red {}) z)) =
   let l' = Black l x r
       r' = turnBlack r1
       node = Red l' x1 r'
       in Right $ BZ node z
-tryInsert l (ZLR x r (ZLB x1 r1@(Black {}) z)) = _
+tryInsert n1 (ZLR x2 n3 (ZLB x4 n5@(Black {}) z)) = 
+      Left $ AZ (Black n1 x2 (Red n3 x4 n5)) z
 
 -- insert :: Ord a => a -> RedBlackTree n 'B a -> RedBlackTree ('S n) 'B a
 -- insert x Nil = Black Nil x Nil
