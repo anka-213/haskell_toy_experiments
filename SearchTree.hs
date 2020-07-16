@@ -27,6 +27,12 @@ data SearchTree leftBound rightBound a where
 
 deriving instance Show a => Show (SearchTree lb rb a)
 
+instance Foldable (SearchTree lb rb) where
+    foldr _ z Leaf = z
+    foldr f z (Node l _ (The x) _ r) = foldr f (x `f` (foldr f z r)) l
+    foldMap _ Leaf = mempty
+    foldMap f (Node l _ (The x) _ r) = foldMap f l <> f x <> foldMap f r
+
 type UnboundedTree = SearchTree NegInfty Infinity
 
 pattern Nyde a lb rb l r = Node l lb a rb r
@@ -50,6 +56,10 @@ rotateR x = x
 
 fromList :: Ord a => [a] -> UnboundedTree a
 fromList = foldr insert Leaf
+
+-- props:
+--  toList . fromList === sort
+--  fromList . toList =/= id
 
 -- Node (Node (Node Leaf _ 3 _ (Node (Node Leaf _ 3 _ Leaf) _ 4 _ Leaf))
 --            _ 5 _
