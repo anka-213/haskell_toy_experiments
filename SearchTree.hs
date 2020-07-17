@@ -1,3 +1,9 @@
+{- | An experiment to try out Ghosts of Departed Proofs
+
+See https://hackage.haskell.org/package/gdp
+and https://kataskeue.com/gdp.pdf
+-}
+
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
@@ -6,12 +12,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -Wall -Wno-missing-signatures -Wno-missing-pattern-synonym-signatures #-}
-
-{- | An experiment to try out Ghosts of Departed Proofs
-
-See https://hackage.haskell.org/package/gdp
-and https://kataskeue.com/gdp.pdf
--}
 
 module SearchTree where
 
