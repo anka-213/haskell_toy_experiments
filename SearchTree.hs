@@ -7,8 +7,15 @@
 {-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -Wall -Wno-missing-signatures -Wno-missing-pattern-synonym-signatures #-}
 
+{- | An experiment to try out Ghosts of Departed Proofs
+
+See https://hackage.haskell.org/package/gdp
+and https://kataskeue.com/gdp.pdf
+-}
+
 module SearchTree where
 
+-- A miniature implementation of GDP to avoid external dependencies
 import MiniGDP
 
 data Nat = Z | S Nat
@@ -18,8 +25,11 @@ data Nat = Z | S Nat
 data SearchTree leftBound rightBound a where
   Leaf :: SearchTree leftBound rightBound a
   Node ::
+    -- | The left subtree has this node as right bound
     SearchTree leftBound la a ->
+    -- | The element must respect our left bound
     Smaller leftBound la ->
+    -- | The current element is named la, so we can describe its properties with gdp
     Named la a ->
     Smaller la rightBound ->
     SearchTree la rightBound a ->
@@ -33,22 +43,23 @@ instance Foldable (SearchTree lb rb) where
     foldMap _ Leaf = mempty
     foldMap f (Node l _ (The x) _ r) = foldMap f l <> f x <> foldMap f r
 
+-- A full tree does not have any left/right bounds, which we model with magical values NegInfty/Infinity, 
+-- which are smaller/larger than any other value
 type UnboundedTree = SearchTree NegInfty Infinity
 
-pattern Nyde a lb rb l r = Node l lb a rb r
--- retrie --adhoc "forall x lb rb l r. Nyde x lb rb l r = Node l lb x rb r" -i2 --target-file SearchTree.hs
-
+-- The first thing we do when inserting an element is giving it a name, so it can be referred to in the constraints
 insert :: Ord a => a -> UnboundedTree a -> UnboundedTree a
 insert x = name x \nx -> insert' nx cmpNegInfty cmpInfinity
 
+-- This is very naive insertion without any balancing
+-- we could do something more sofisticated and still be guaranteed that the tree is sorted as it should
 insert' :: Ord a => Named l a -> Smaller lb l -> Smaller l rb -> SearchTree lb rb a -> SearchTree lb rb a
 insert' x lb rb Leaf = Node Leaf lb x rb Leaf
 insert' x lb rb (Node l lb' y rb' r) = case compareNamed x y of
     Left ans -> Node (insert' x lb ans l) lb' y rb' r
     Right ans -> Node l lb' y rb' (insert' x ans rb r)
 
-
--- rotate
+-- This could be implemented mostly with automatic hole filling, without much thinking
 rotateR :: SearchTree lb rb a -> SearchTree lb rb a
 rotateR (Node (Node ll llb y lrb lr) _lb x rb r) = Node ll llb y (cmpTrans lrb rb) (Node lr lrb x rb r)
 rotateR x = x
