@@ -41,6 +41,7 @@ tailcl = fmap snd . foldr (\x ->
 
 newtype MaybeCL a = Mcl (forall r. (r -> (a -> r) -> r))
 
+
 nothingCL :: MaybeCL a
 nothingCL = Mcl \ n _ -> n
 

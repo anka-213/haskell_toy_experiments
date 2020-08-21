@@ -9,7 +9,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+-- {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE RoleAnnotations       #-}
 
