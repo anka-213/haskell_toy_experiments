@@ -76,9 +76,9 @@ pattern FSoPF xss = Fix (SoPF xss)
 toSoPF :: SimpleExprF SoP -> SoPF SoP
 toSoPF e = case e of
     (SoPF as) :+: (SoPF bs) -> SoPF $ unionLists as bs
-    (SoPF as) :-: (SoPF bs) -> SoPF $ subtractLists as bs
+    (SoPF as) :-: (SoPF bs) -> SoPF $ unionLists as $ negateMSL bs
     (SoPF as) :*: (SoPF bs) -> SoPF [(sort $ a ++ b, n * m) | (a, n) <- as, (b, m) <- bs]
-    SymbolicFuncF "-" [FSoPF as] -> SoPF $ negateMSL as
+    NegateF (SoPF as) -> SoPF $ negateMSL as
     NumberF 0 -> SoPF []
     NumberF n -> SoPF [([],n)]
     _ -> SoPF [([e],1)]
@@ -142,9 +142,7 @@ type MultiSetList a = [(a,Integer)]
 union :: Ord a => MultiSet a -> MultiSet a -> MultiSet a
 union = M.unionWith (+)
 unionLists :: Ord a => MultiSetList a -> MultiSetList a -> MultiSetList a
-unionLists a b = M.toAscList $ M.unionWith (+) (M.fromDistinctAscList a) (M.fromDistinctAscList b)
-subtractLists :: Ord a => MultiSetList a -> MultiSetList a -> MultiSetList a
-subtractLists a b = removeEmpty $ M.toAscList $ M.unionWith (-) (M.fromDistinctAscList a) (M.fromDistinctAscList b)
+unionLists a b = removeEmpty $ M.toAscList $ M.unionWith (+) (M.fromDistinctAscList a) (M.fromDistinctAscList b)
 negateMSL :: MultiSetList a -> MultiSetList a
 negateMSL = fmap (\(a, n) -> (a, -n))
 removeEmpty :: MultiSetList a -> MultiSetList a
