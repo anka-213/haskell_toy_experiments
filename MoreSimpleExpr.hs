@@ -7,12 +7,16 @@ import Debug.SimpleExpr
 import Debug.SimpleExpr.Expr
 import Data.Fix
 import Data.Functor.Classes
-import Data.List (sort)
+import Data.List (sort, groupBy)
+import Data.Function (on)
+import qualified Data.Map as M
 
-k :: SimpleExpr = variable "k"
 a :: SimpleExpr = variable "a"
-z :: SimpleExpr = variable "z"
+b :: SimpleExpr = variable "b"
+-- b :: SimpleExpr = Fix (VariableF "b")
 c :: SimpleExpr = variable "c"
+k :: SimpleExpr = variable "k"
+z :: SimpleExpr = variable "z"
 lc :: SimpleExpr = variable "log c" -- Todo, use function instead
 lk :: SimpleExpr = variable "log k"
 log_k :: SimpleExpr = variable "log k"
@@ -48,7 +52,6 @@ bottomUp' nt = go where go = nt . Fix . fmap go . unFix
 
 simplify'' :: SimpleExpr -> SimpleExpr
 simplify'' = bottomUp' simpStep
-b :: SimpleExpr = Fix (VariableF "b")
 
 simpStep :: SimpleExpr -> SimpleExpr
 simpStep e = case e of
@@ -72,11 +75,15 @@ pattern FSoPF xss = Fix (SoPF xss)
 
 toSoPF :: SimpleExprF SoP -> SoPF SoP
 toSoPF e = case e of
-    (SoPF as) :+: (SoPF bs) -> SoPF $ (as ++ bs) -- TODO: Use merge for faster sort and merge equal elems
-    (SoPF as) :*: (SoPF bs) -> SoPF [(a ++ b, n * m) | (a, n) <- as, (b, m) <- bs]
+    (SoPF as) :+: (SoPF bs) -> SoPF $ mergeTerms $ sort (as ++ bs) -- TODO: Use merge for faster sort and merge equal elems
+    (SoPF as) :*: (SoPF bs) -> SoPF [(sort $ a ++ b, n * m) | (a, n) <- as, (b, m) <- bs]
     NumberF 0 -> SoPF []
     NumberF n -> SoPF [([],n)]
     _ -> SoPF [([e],1)]
+  where
+    mergeTerms :: [([SimpleExprF SoP], Integer)] -> [([SimpleExprF SoP], Integer)]
+    mergeTerms = id -- _ . groupBy ((==) `on` fst)
+
 
 toSoP :: SimpleExpr -> SoP
 toSoP = bottomUp toSoPF
@@ -94,11 +101,32 @@ type SoP = Fix SoPF
 -- a /= BinaryFuncF "+" _ _
 -- a /= BinaryFuncF "·" _ _
 
--- instance Eq1 SoPF where
---   liftEq innerEq = _
+instance Eq1 SoPF where
+  -- liftEq innerEq (SoPF xss) (SoPF yss) = _
+  liftEq = liftEqAuto
 
--- instance Ord1 SoPF where
---   liftCompare innerCompare (SoPF xss) (SoPF yss) = liftCompare (liftCompare2 (liftCompare _) compare) xss yss
+instance Ord1 SoPF where
+  -- liftCompare innerCompare (SoPF xss) (SoPF yss) = liftCompare (liftCompare2 (liftCompare (liftCompare innerCompare)) compare) xss yss
+  liftCompare = liftCompareAuto
+
+liftEqAuto :: (Functor f, Eq (f (EqWrapper a b))) => (a -> b -> Bool) -> f a -> f b -> Bool
+liftEqAuto cmp fa fb = fmap (EqWrapper cmp . Left) fa == fmap (EqWrapper cmp . Right) fb
+
+liftCompareAuto :: (Functor f, Ord (f (OrdWrapper a b))) => (a -> b -> Ordering) -> f a -> f b -> Ordering
+liftCompareAuto cmp fa fb = compare (fmap (OrdWrapper cmp . Left) fa) (fmap (OrdWrapper cmp . Right) fb)
+
+data EqWrapper a b = EqWrapper (a -> b -> Bool) (Either a b)
+data OrdWrapper a b = OrdWrapper (a -> b -> Ordering) (Either a b)
+
+instance Eq (EqWrapper a b) where
+  (==) (EqWrapper cmp (Left a)) (EqWrapper _ (Right b)) = cmp a b
+  (==) _ _ = error "liftEqAuto: Invalid comparison"
+
+instance Eq (OrdWrapper a b) where
+  a == b = compare a b == EQ
+instance Ord (OrdWrapper a b) where
+  compare (OrdWrapper cmp (Left a)) (OrdWrapper _ (Right b)) = cmp a b
+  compare _ _ = error "liftCompareAuto: Invalid comparison"
 
 newtype ShowExpr a = SE (SimpleExprF a)
 
