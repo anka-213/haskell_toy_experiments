@@ -17,21 +17,22 @@ lk :: SimpleExpr = variable "log k"
 log_k :: SimpleExpr = variable "log k"
 log_c :: SimpleExpr = variable "log c"
 o_2 :: SimpleExpr = variable "0.2"
-pattern (:+) :: Fix SimpleExprF -> Fix SimpleExprF -> Fix SimpleExprF
 pattern a :+ b = Fix (BinaryFuncF "+" a b)
 infixl 9 :+
-pattern (:*) :: Fix SimpleExprF -> Fix SimpleExprF -> Fix SimpleExprF
 pattern a :* b = Fix (BinaryFuncF "·" a b)
 infixl 9 :*
-pattern (:-) :: Fix SimpleExprF -> Fix SimpleExprF -> Fix SimpleExprF
 pattern a :- b = Fix (BinaryFuncF "-" a b)
 infixl 9 :-
 pattern Zero = Fix (NumberF 0)
 
+pattern a :+: b = BinaryFuncF "+" (Fix a) (Fix b)
+pattern a :*: b = BinaryFuncF "·" (Fix a) (Fix b)
+pattern a :-: b = BinaryFuncF "-" (Fix a) (Fix b)
+
 simplify' :: Fix SimpleExprF -> Fix SimpleExprF
 simplify' = bottomUp (unFix . simplifyStep id . Fix)
 
-bottomUp :: Functor f => (f (Fix f) -> f (Fix f)) -> Fix f -> Fix f
+bottomUp :: Functor f => (f (Fix g) -> g (Fix g)) -> Fix f -> Fix g
 bottomUp nt = go where go = Fix . nt . fmap go . unFix
 
 pattern Nr :: Integer -> Fix SimpleExprF
@@ -66,8 +67,14 @@ pattern FSoPF xss = Fix (SoPF xss)
 
 toSoPF :: SimpleExprF SoP -> SoPF SoP
 toSoPF e = case e of
-    BinaryFuncF "+" (FSoPF as) (FSoPF bs) -> SoPF (as ++ bs) -- TODO: Sort and merge
-    BinaryFuncF "·" (FSoPF as) (FSoPF bs) -> SoPF [a ++ b | a <- as, b <- bs]
+    (SoPF as) :+: (SoPF bs) -> SoPF (as ++ bs) -- TODO: Sort and merge
+    (SoPF as) :*: (SoPF bs) -> SoPF [a ++ b | a <- as, b <- bs]
+    NumberF 0 -> SoPF []
+    NumberF 1 -> SoPF [[]]
+    _ -> SoPF [[e]]
+
+toSoP :: SimpleExpr -> SoP
+toSoP = bottomUp toSoPF
 
 -- Expression as a sum of products
 newtype SoPF a = SoPF [[SimpleExprF a]] deriving (Eq, Ord, Functor)
@@ -98,7 +105,11 @@ instance Show1 SimpleExprF where
 
 -- instance Show1 SoPF where liftShowsPrec sp sl d (SoPF e) = liftShowsPrec (liftShowsPrec (liftShowsPrec sp sl) (liftShowList sp sl)) (liftShowList (liftShowsPrec sp sl) (liftShowList sp sl)) d e
 -- instance Show1 SoPF where liftShowsPrec sp sl d (SoPF e) = (getLSP . liftShowPair . liftShowPair . liftShowPair $ SP sp sl) d e
-instance Show1 SoPF where liftShowsPrec sp sl d (SoPF e) = showsPrecOperList 6 " + " "0" (showsPrecOperList 7 " * " "1" (liftShowsPrec sp sl)) d e
+instance Show1 SoPF where
+  liftShowsPrec sp sl d (SoPF e) = showPlus (showTimes(liftShowsPrec sp sl)) d e
+    where
+      showPlus  = showsPrecOperList 6 " + " "0"
+      showTimes = showsPrecOperList 7 "*" "1"
 
 -- Remove the "Fix" wrapper
 -- instance {-# OVERLAPPING #-} Show (Fix SoPF) where showsPrec d (Fix f) = showsPrec d f
