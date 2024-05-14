@@ -9,7 +9,7 @@ import Data.Fix
 import Data.Functor.Classes
 import Data.List (sort, groupBy)
 import Data.Function (on)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 a :: SimpleExpr = variable "a"
 b :: SimpleExpr = variable "b"
@@ -75,8 +75,10 @@ pattern FSoPF xss = Fix (SoPF xss)
 
 toSoPF :: SimpleExprF SoP -> SoPF SoP
 toSoPF e = case e of
-    (SoPF as) :+: (SoPF bs) -> SoPF $ mergeTerms $ sort (as ++ bs) -- TODO: Use merge for faster sort and merge equal elems
+    (SoPF as) :+: (SoPF bs) -> SoPF $ unionLists as bs
+    (SoPF as) :-: (SoPF bs) -> SoPF $ subtractLists as bs
     (SoPF as) :*: (SoPF bs) -> SoPF [(sort $ a ++ b, n * m) | (a, n) <- as, (b, m) <- bs]
+    SymbolicFuncF "-" [FSoPF as] -> SoPF $ negateMSL as
     NumberF 0 -> SoPF []
     NumberF n -> SoPF [([],n)]
     _ -> SoPF [([e],1)]
@@ -91,8 +93,31 @@ toSoP = bottomUp toSoPF
 -- >>> toSoP $ (0 + 1) + mySin (a + 0 + b)*2 + 3*k*4 + 3 + 5 +
 -- 1 + 2*sin (a + b) + 12*k + 3 + 5
 
+-- >>> toSoP $ (0 + 1) + mySin (a + 0*c + b-*-(k-*-2))*2 + 3*k*4 + 3 + 5 + b*c*b
+-- 1 + 3 + 5 + b*b*c + 12*k + 2*sin (a + (b -*- (k -*- 2)))
+
+-- sopfToSimpleExprF :: SoPF SimpleExpr -> SimpleExprF SimpleExpr
+-- sopfToSimpleExprF = _
+-- sopToSimpleExpr :: SoP -> SimpleExpr
+-- sopToSimpleExpr = bottomUp sopfToSimpleExprF
+
+
 -- Expression as a sum of products
-newtype SoPF a = SoPF [([SimpleExprF a], Integer)] deriving (Eq, Ord, Functor)
+newtype SoPF a = SoPF (MultiSetList [SimpleExprF a]) deriving (Eq, Ord, Functor)
+unSoPF (SoPF a) = a
+
+{-
+>>> unFix $ toSoP $ (0 + 1) + mySin (a + 0*c + b-*-(k-*-2))*2 + 3*k*4 + 3 + 5 + b*c*b + k + c*b*b - k + c + (- 3 - c)
+SoPF [([],6),([VariableF "b",VariableF "b",VariableF "c"],2),([VariableF "c"],2),([VariableF "k"],12),([SymbolicFuncF "sin" [a + (b -*- (k -*- 2))]],2)]
+
+>>> toSoP $ (0 + 1) + mySin (a + 0*c + b-*-(k-*-2))*2 + 3*k*4 + 3 + 5 + b*c*b + k + c*b*b - k + c + (- 3 - c)
+6 + 2·b·b·c + 2·c + 12·k + 2·sin (a + (b -*- (k -*- 2)))
+-}
+
+-- Debugging instance
+deriving instance Show a => Show (SimpleExprF a)
+deriving instance Show a => Show (SoPF a)
+
 type SoP = Fix SoPF
 -- SoPF [([a,b],n),([c,d], m)] ~ n*a*b + m*c*d
 -- Invariants for SoPF [(a,n)]:
@@ -109,6 +134,24 @@ instance Ord1 SoPF where
   -- liftCompare innerCompare (SoPF xss) (SoPF yss) = liftCompare (liftCompare2 (liftCompare (liftCompare innerCompare)) compare) xss yss
   liftCompare = liftCompareAuto
 
+-- * Multisets
+-- TODO: consider replacing with sorted list
+type MultiSet a = M.Map a Integer
+type MultiSetList a = [(a,Integer)]
+-- TODO: delete when count is 0
+union :: Ord a => MultiSet a -> MultiSet a -> MultiSet a
+union = M.unionWith (+)
+unionLists :: Ord a => MultiSetList a -> MultiSetList a -> MultiSetList a
+unionLists a b = M.toAscList $ M.unionWith (+) (M.fromDistinctAscList a) (M.fromDistinctAscList b)
+subtractLists :: Ord a => MultiSetList a -> MultiSetList a -> MultiSetList a
+subtractLists a b = removeEmpty $ M.toAscList $ M.unionWith (-) (M.fromDistinctAscList a) (M.fromDistinctAscList b)
+negateMSL :: MultiSetList a -> MultiSetList a
+negateMSL = fmap (\(a, n) -> (a, -n))
+removeEmpty :: MultiSetList a -> MultiSetList a
+removeEmpty = filter ((/= 0) . snd)
+singeltonMS k = M.singleton k 1
+
+-- * Eq1 helpers
 liftEqAuto :: (Functor f, Eq (f (EqWrapper a b))) => (a -> b -> Bool) -> f a -> f b -> Bool
 liftEqAuto cmp fa fb = fmap (EqWrapper cmp . Left) fa == fmap (EqWrapper cmp . Right) fb
 
@@ -158,8 +201,8 @@ instance Show1 SoPF where
   liftShowsPrec sp sl d (SoPF e) = showPlus (showTimes (liftShowsPrec sp sl)) d e
     where
       showPlus  = showsPrecOperList 6 " + " "0"
-      showTimes sp d (xs, 1) = showsPrecOperList 7 "*" "1" sp d xs
-      showTimes sp d (xs, n) = showsPrecOperList 7 "*" "1" sp d (NumberF n : xs)
+      showTimes sp d (xs, 1) = showsPrecOperList 7 "·" "1" sp d xs
+      showTimes sp d (xs, n) = showsPrecOperList 7 "·" "1" sp d (NumberF n : xs)
 
 -- Remove the "Fix" wrapper
 -- instance {-# OVERLAPPING #-} Show (Fix SoPF) where showsPrec d (Fix f) = showsPrec d f
