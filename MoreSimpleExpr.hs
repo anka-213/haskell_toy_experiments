@@ -27,16 +27,19 @@ mySin = unaryFunc "sin"
 (-*-) = binaryFunc "-*-"
 
 pattern a :+ b = Fix (BinaryFuncF "+" a b)
-infixl 9 :+
+infixl 6 :+
 pattern a :* b = Fix (BinaryFuncF "·" a b)
-infixl 9 :*
+infixl 7 :*
 pattern a :- b = Fix (BinaryFuncF "-" a b)
-infixl 9 :-
+infixl 6 :-
 pattern Zero = Fix (NumberF 0)
 
 pattern a :+: b = BinaryFuncF "+" (Fix a) (Fix b)
+infixl 6 :+:
 pattern a :*: b = BinaryFuncF "·" (Fix a) (Fix b)
+infixl 7 :*:
 pattern a :-: b = BinaryFuncF "-" (Fix a) (Fix b)
+pattern NegateF a = SymbolicFuncF "-" [Fix a]
 
 simplify' :: Fix SimpleExprF -> Fix SimpleExprF
 simplify' = bottomUp (unFix . simplifyStep id . Fix)
@@ -96,11 +99,32 @@ toSoP = bottomUp toSoPF
 -- >>> toSoP $ (0 + 1) + mySin (a + 0*c + b-*-(k-*-2))*2 + 3*k*4 + 3 + 5 + b*c*b
 -- 1 + 3 + 5 + b*b*c + 12*k + 2*sin (a + (b -*- (k -*- 2)))
 
--- sopfToSimpleExprF :: SoPF SimpleExpr -> SimpleExprF SimpleExpr
--- sopfToSimpleExprF = _
--- sopToSimpleExpr :: SoP -> SimpleExpr
--- sopToSimpleExpr = bottomUp sopfToSimpleExprF
+fromSoPF :: SoPF SimpleExpr -> SimpleExprF SimpleExpr
+fromSoPF (SoPF e0) = handleSum e0
+  where
+    -- TODO: Replace both with foldl1
+    -- handleSum :: MultiSetList [SimpleExprF a] -> SimpleExprF SimpleExpr
+    handleSum e1 = case e1 of
+      [] -> NumberF 0
+      [(e, n)] -> handleProducts (NumberF n : e)
+      ((e, n):xs) -> handleProducts (NumberF n : e) :+: handleSum xs
+    handleProducts :: [SimpleExprF SimpleExpr] -> SimpleExprF SimpleExpr
+    handleProducts e1 = case e1 of
+      [] -> NumberF 1 -- Redundant, since we always add a count when calling
+      [e] -> e
+      (NumberF 1 : es) -> handleProducts es
+      (NumberF n : es) | n < 0 -> NegateF $ handleProducts $ NumberF (-n) : es
+      (e:es) -> e :*: handleProducts es
 
+fromSoP :: SoP -> SimpleExpr
+fromSoP = bottomUp fromSoPF
+
+-- | Normalization by evaluation
+nbeNorm :: SimpleExpr -> SimpleExpr
+nbeNorm = fromSoP . toSoP
+
+-- >>> nbeNorm $ (0 + 1) + mySin (a + 0*c + b-*-(k-*-2))*2 + 3*k*4 + 3 + 5 + b*c*b + k + c*b*b - k + c + (- 3 - c) - z - z
+-- 6+((2·(b·(b·c)))+((12·k)+(-(2·z)+(2·sin(a+(b-*-(k-*-2)))))))
 
 -- Expression as a sum of products
 newtype SoPF a = SoPF (MultiSetList [SimpleExprF a]) deriving (Eq, Ord, Functor)
