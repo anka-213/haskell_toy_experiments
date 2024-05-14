@@ -106,15 +106,16 @@ fromSoPF (SoPF e0) = handleSum e0
     -- handleSum :: MultiSetList [SimpleExprF a] -> SimpleExprF SimpleExpr
     handleSum e1 = case e1 of
       [] -> NumberF 0
-      [(e, n)] -> handleProducts (NumberF n : e)
-      ((e, n):xs) -> handleProducts (NumberF n : e) :+: handleSum xs
+      es -> foldl1 (:+:) $ [handleProducts (NumberF n : e) | (e,n) <- es]
+      -- [(e, n)] -> handleProducts (NumberF n : e)
+      -- ((e, n):xs) -> handleProducts (NumberF n : e) :+: handleSum xs
     handleProducts :: [SimpleExprF SimpleExpr] -> SimpleExprF SimpleExpr
     handleProducts e1 = case e1 of
-      [] -> NumberF 1 -- Redundant, since we always add a count when calling
+      [] -> NumberF 1 -- Needed for the [NumberF 1] case below
       [e] -> e
       (NumberF 1 : es) -> handleProducts es
       (NumberF n : es) | n < 0 -> NegateF $ handleProducts $ NumberF (-n) : es
-      (e:es) -> e :*: handleProducts es
+      (e:es) -> foldl1 (:*:) (e:es) -- e :*: handleProducts es
 
 fromSoP :: SoP -> SimpleExpr
 fromSoP = bottomUp fromSoPF
