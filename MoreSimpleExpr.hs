@@ -7,6 +7,7 @@ import Debug.SimpleExpr
 import Debug.SimpleExpr.Expr
 import Data.Fix
 import Data.Functor.Classes
+import Data.List (sort)
 
 k :: SimpleExpr = variable "k"
 a :: SimpleExpr = variable "a"
@@ -17,6 +18,10 @@ lk :: SimpleExpr = variable "log k"
 log_k :: SimpleExpr = variable "log k"
 log_c :: SimpleExpr = variable "log c"
 o_2 :: SimpleExpr = variable "0.2"
+
+mySin = unaryFunc "sin"
+(-*-) = binaryFunc "-*-"
+
 pattern a :+ b = Fix (BinaryFuncF "+" a b)
 infixl 9 :+
 pattern a :* b = Fix (BinaryFuncF "·" a b)
@@ -67,7 +72,7 @@ pattern FSoPF xss = Fix (SoPF xss)
 
 toSoPF :: SimpleExprF SoP -> SoPF SoP
 toSoPF e = case e of
-    (SoPF as) :+: (SoPF bs) -> SoPF (as ++ bs) -- TODO: Sort and merge
+    (SoPF as) :+: (SoPF bs) -> SoPF $ (as ++ bs) -- TODO: Use merge for faster sort and merge equal elems
     (SoPF as) :*: (SoPF bs) -> SoPF [(a ++ b, n * m) | (a, n) <- as, (b, m) <- bs]
     NumberF 0 -> SoPF []
     NumberF n -> SoPF [([],n)]
@@ -76,16 +81,24 @@ toSoPF e = case e of
 toSoP :: SimpleExpr -> SoP
 toSoP = bottomUp toSoPF
 
+-- >>> toSoP $ (0 + 1) + mySin (a + 0 + b)*2 + 3*k*4 + 3 + 5 +
+-- 1 + 2*sin (a + b) + 12*k + 3 + 5
+
 -- Expression as a sum of products
 newtype SoPF a = SoPF [([SimpleExprF a], Integer)] deriving (Eq, Ord, Functor)
 type SoP = Fix SoPF
 -- SoPF [([a,b],n),([c,d], m)] ~ n*a*b + m*c*d
--- Invariants:
+-- Invariants for SoPF [(a,n)]:
 -- n /= 0
 -- a /= NumberF _
 -- a /= BinaryFuncF "+" _ _
 -- a /= BinaryFuncF "·" _ _
 
+-- instance Eq1 SoPF where
+--   liftEq innerEq = _
+
+-- instance Ord1 SoPF where
+--   liftCompare innerCompare (SoPF xss) (SoPF yss) = liftCompare (liftCompare2 (liftCompare _) compare) xss yss
 
 newtype ShowExpr a = SE (SimpleExprF a)
 
@@ -108,7 +121,7 @@ instance Show1 SimpleExprF where
   liftShowsPrec showsPrec' _ d e = case e of
     NumberF n -> showsPrec d n
     VariableF nm -> showString nm
-    BinaryFuncF nm l r -> showParen (d > 9) $ showsPrec' 10 l . showString " " . showString nm . showString " " . showsPrec' 10 r
+    BinaryFuncF nm l r -> showParen (d > 1) $ showsPrec' 10 l . showString " " . showString nm . showString " " . showsPrec' 10 r
     SymbolicFuncF name args -> showParen (d > 10) $ showString name . foldr (.) id [showString " " . showsPrec' 11 arg | arg <- args]
 
 -- instance Show1 SoPF where liftShowsPrec sp sl d (SoPF e) = liftShowsPrec (liftShowsPrec (liftShowsPrec sp sl) (liftShowList sp sl)) (liftShowList (liftShowsPrec sp sl) (liftShowList sp sl)) d e
@@ -117,6 +130,7 @@ instance Show1 SoPF where
   liftShowsPrec sp sl d (SoPF e) = showPlus (showTimes (liftShowsPrec sp sl)) d e
     where
       showPlus  = showsPrecOperList 6 " + " "0"
+      showTimes sp d (xs, 1) = showsPrecOperList 7 "*" "1" sp d xs
       showTimes sp d (xs, n) = showsPrecOperList 7 "*" "1" sp d (NumberF n : xs)
 
 -- Remove the "Fix" wrapper
