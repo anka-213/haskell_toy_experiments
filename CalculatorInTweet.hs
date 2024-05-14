@@ -64,6 +64,7 @@ int = StateT $ listToMaybe . reads
 parse :: Parser a -> String -> Maybe (a, String)
 parse = runStateT
 
+{-
 -- >>> parse parens "(()())"
 -- attempting to use module ‘fake_uid:Main’ (/Users/anka/cclaw/dmnmd/languages/haskell/ParserInTweet.hs) which is not loaded
 
@@ -74,3 +75,5 @@ parse = runStateT
 -- $> parse expr "5-3+3"
 
 --- $> :t StateT uncons
+
+-}

@@ -1,0 +1,7 @@
+# Haskell
+*.hi
+*.o
+
+
+# Vim
+*.swp

@@ -1,0 +1,4 @@
+- warn: {lhs: concat (map f x), rhs: concatMap f x}
+- warn: {lhs: foldr k z (build g), rhs: g k z}
+
+# - ignore: {name: "Avoid lambda"}
