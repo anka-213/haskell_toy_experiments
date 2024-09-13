@@ -12,8 +12,6 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 import Prelude hiding (fst, snd, id, (.))
 -- import Prelude qualified
@@ -182,9 +180,10 @@ newtype DSpan a b sel = DS { unDS :: DSpan' a b sel }
 
 newtype Const2 k a b = Const2 k
 
--- instance Diagram (DSpan a b) where
---     type Arrow (DSpan a b) = (:~:)
---     dmap _ _ Refl = id
+instance Diagram (DSpan a b) where
+    type Arrow (DSpan a b) = (:~:)
+    dmap _ _ Refl = id
+
 
 newtype DiscreteDiagram (fam :: a -> Type) (idx :: a) = DD { getDD :: fam idx }
 
@@ -192,8 +191,6 @@ instance Diagram (DiscreteDiagram fam) where
     type Arrow (DiscreteDiagram fam) = (:~:)
     dmap _ _ Refl = id
 --     dmap (Const2 v) = absurd v
-
-deriving via DiscreteDiagram (DSpan a b) instance Diagram (DSpan a b)
 
 newtype SpanCone s a b = SpanCone { getSpanCon :: s a b }
 
@@ -288,8 +285,6 @@ type family AtIndex' (xs :: [Type]) (j :: ListIndex xs) :: Type where
 
 newtype AtIndex xs n = AI { getAI :: AtIndex' xs n }
 
-deriving via (DiscreteDiagram (AtIndex xs)) instance Diagram (AtIndex xs)
-
 grabIndex :: SListIndex j -> HList xs -> AtIndex' xs j
 grabIndex SHere (HCons x _) = x
 grabIndex (SThere i) (HCons _ xs) = grabIndex i xs
@@ -300,9 +295,9 @@ grabIndex (SThere i) (HCons _ xs) = grabIndex i xs
 
 -- data SomeCone1' (d :: k -> j -> Type) (a :: k) = forall c. Cone (c a) (d a) => MkSomeCone1' (c a)
 
--- instance Diagram (AtIndex xs) where
---     type Arrow (AtIndex xs) = (:~:)
---     dmap _ _ Refl = id
+instance Diagram (AtIndex xs) where
+    type Arrow (AtIndex xs) = (:~:)
+    dmap _ _ Refl = id
 
 instance Cone (HList xs) (AtIndex xs) where
     indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
