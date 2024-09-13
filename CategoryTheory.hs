@@ -13,13 +13,27 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-import Prelude hiding (fst, snd)
+import Prelude hiding (fst, snd, id, (.))
+import Prelude qualified
 import Data.Void (Void, absurd)
 import Data.Kind (Type, Constraint)
+import Data.Type.Equality ( type (:~:)(Refl), trans )
 -- import GHC.Internal.TypeLits (KnownNat)
 -- import Data.Data (Proxy(Proxy))
 -- import Data.Functor.Const (Const)
 -- import Data.Singletons
+
+class Category j where
+    -- type Obj j :: Type
+    type Arrow j :: j -> j -> Type
+    id :: Arrow j a a
+    (.) :: Arrow j b c -> Arrow j a b -> Arrow j a c
+
+instance Category Type where
+    -- type Obj Type = Type
+    type Arrow Type = (->)
+    id = Prelude.id
+    (.) = (Prelude..)
 
 -- No laws
 class Span s where
@@ -137,10 +151,10 @@ class ConstrainedFunctor (c :: Type -> Constraint) f where
 
 -- Diagrams are defined as functors from an index category to Hask.
 -- j is the (set of objects of the) index category. Singletons of j are used to pattern match on objects.
--- Arrows in j are defined as a haskell type. I have not defined id and composition.
-class Diagram (d :: j -> Type) where
-    type Arrow j d :: j -> j -> Type
-    dmap :: forall (ja :: j) (jb :: j). Sing ja -> Sing jb -> Arrow j d ja jb -> d ja -> d jb
+-- Arrow in j are defined as a haskell type. I have not defined id and composition.
+class Category j => Diagram (d :: j -> Type) where
+    -- type Arrow j d :: j -> j -> Type
+    dmap :: forall (ja :: j) (jb :: j). Sing ja -> Sing jb -> Arrow j ja jb -> d ja -> d jb
 
 -- instance Functor f => Diagram f where
 --     type Arrow Type = (->)
@@ -149,7 +163,7 @@ class Diagram (d :: j -> Type) where
 class Diagram d => Cone n d | n -> d where
     indexCone :: Sing j -> n -> d j
 
-coneLaw :: forall {j} {d :: j -> Type} {a :: j} {b :: j} {n} . (Eq (d b), Cone n d) => Sing a -> Sing b -> Arrow j d a b -> n -> Bool
+coneLaw :: forall {j} {d :: j -> Type} {a :: j} {b :: j} {n} . (Eq (d b), Cone n d) => Sing a -> Sing b -> Arrow j a b -> n -> Bool
 coneLaw a b f x = dmap a b f (indexCone @n @d a x) == indexCone b x
 
 type family Sing :: k -> Type
@@ -169,13 +183,30 @@ newtype DSpan a b sel = DS { unDS :: DSpan' a b sel }
 
 newtype Const2 k a b = Const2 k
 
+instance Category Bool where
+    type Arrow Bool = Const2 Void
+    id = undefined
+    Const2 x . _ = absurd x
+
 instance Diagram (DSpan a b) where
-    type Arrow Bool (DSpan a b) = Const2 Void
     dmap _ _ (Const2 v) = absurd v
 
-newtype DiscreteDiagram fam idx = DD (fam idx)
+newtype DiscreteCategory a = DC { getDC :: a }
 
--- instance Diagram (DiscreteDiagram fam) where
+type family GetDC x where GetDC (DC y) = y
+
+instance Category (DiscreteCategory a) where
+    type Arrow (DiscreteCategory a) = (:~:)
+    id = Refl
+    (.) = flip trans
+
+data SDiscr j where SDC :: Sing a -> SDiscr (DC a)
+type instance Sing = SDiscr
+
+newtype DiscreteDiagram (fam :: a -> Type) (idx :: DiscreteCategory a) = DD (fam (GetDC idx))
+
+instance Diagram (DiscreteDiagram fam) where
+    dmap _ _ Refl = id
 --     type Arrow j = Const2 Void
 --     dmap (Const2 v) = absurd v
 
@@ -282,13 +313,21 @@ grabIndex (SThere i) (HCons _ xs) = grabIndex i xs
 
 -- data SomeCone1' (d :: k -> j -> Type) (a :: k) = forall c. Cone (c a) (d a) => MkSomeCone1' (c a)
 
+instance Category (ListIndex xs) where
+    type Arrow (ListIndex xs) = (:~:)
+    id = Refl
+    (.) = flip trans
 instance Diagram (AtIndex xs) where
-    type Arrow (ListIndex xs) (AtIndex xs) = Const2 Void
-    dmap _ _ (Const2 v) = absurd v
+    dmap _ _ Refl = id
 
-instance Cone (HList xs) (AtIndex xs) where
-    indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
-    indexCone i xs = AI $ grabIndex i xs
+-- instance Cone (HList xs) (AtIndex xs) where
+-- instance Cone (HList xs) (AtIndex xs) where
+--     indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
+--     indexCone i xs = AI $ grabIndex i xs
+
+instance Cone (HList xs) (DiscreteDiagram (AtIndex xs)) where
+    indexCone :: forall (j :: DiscreteCategory (ListIndex xs)).  Sing j -> HList xs -> DiscreteDiagram (AtIndex xs) j
+    indexCone (SDC i) xs = DD $ AI $ grabIndex i xs
 
 data SomeDepCone1 (d :: forall k -> j k -> Type) a = forall c. Cone (c a) (d a) => MkSomeDepCone1 (c a)
 type SomeHlistCone xs = SomeDepCone1 AtIndex
@@ -360,29 +399,44 @@ instance (Limit n d, Limit n' d) => Iso (LimitIso n d) (LimitIso n' d) where
     cast = LimitIso . getLimit . getLimitIso
     cocast = LimitIso . getLimit . getLimitIso
 
+newtype Bool' = MkBool' Bool
+type family GetBool' (b :: Bool') where
+    GetBool' (MkBool' x) = x
+
+-- newtype SBool' b = MkSBool' (SBool (GetBool' b))
+data SBool' b where
+    SFalse' :: SBool' (MkBool' False)
+    STrue'  :: SBool' (MkBool' True)
+
+type instance Sing = SBool'
+
 -- newtype Twostar a b = Twostar a
-newtype Twostar a b (j :: Bool) = Twostar { getTwostar :: DSpan' a b j }
+newtype Twostar a b (j :: Bool') = Twostar { getTwostar :: DSpan' a b (GetBool' j) }
 
+instance Category Bool' where
+    type Arrow Bool' = Const2 ()
+    id = Const2 ()
+    _ . _ = Const2 ()
+    -- type Arrow Bool (Twostar a b) = Const2 ()
 instance Iso a b => Diagram (Twostar a b) where
-    type Arrow Bool (Twostar a b) = Const2 ()
 
-    dmap :: SBool j -> SBool k -> Const2 () j k -> Twostar a b j -> Twostar a b k
-    dmap STrue  STrue  (Const2 ()) (Twostar ts) = Twostar $ ts
-    dmap STrue  SFalse (Const2 ()) (Twostar ts) = Twostar $ cocast ts
-    dmap SFalse STrue  (Const2 ()) (Twostar ts) = Twostar $ cast ts
-    dmap SFalse SFalse (Const2 ()) (Twostar ts) = Twostar $ ts
+    dmap :: SBool' j -> SBool' k -> Const2 () j k -> Twostar a b (j) -> Twostar a b (k)
+    dmap STrue'  STrue'  (Const2 ()) (Twostar ts) = Twostar $ ts
+    dmap STrue'  SFalse' (Const2 ()) (Twostar ts) = Twostar $ cocast ts
+    dmap SFalse' STrue'  (Const2 ()) (Twostar ts) = Twostar $ cast ts
+    dmap SFalse' SFalse' (Const2 ()) (Twostar ts) = Twostar $ ts
 
 data Limit2Star a b = L2S a
 
 instance Iso a b => Cone (Limit2Star a b) (Twostar a b) where
     indexCone :: Iso a b => Sing j -> (Limit2Star a b) -> Twostar a b j
-    indexCone idx (L2S a) = dmap SFalse idx (Const2 ()) (Twostar a)
+    indexCone idx (L2S a) = dmap SFalse' idx (Const2 ()) (Twostar a)
     -- indexCone SFalse (L2S a) = Twostar a
     -- indexCone STrue  (L2S a) = Twostar $ cast a
 
 instance Iso a b => Limit (Limit2Star a b) (Twostar a b) where
     getLimit :: (Cone n' (Twostar a b)) => n' -> Limit2Star a b
-    getLimit other = L2S $ getTwostar $ indexCone SFalse other
+    getLimit other = L2S $ getTwostar $ indexCone SFalse' other
 
 data Three = A | B | C
 
@@ -409,8 +463,14 @@ data PullbackArrow (j :: Three) (k :: Three) where
 
 -- newtype PullbackArrow' j k = Pb (PullbackArrow j k)
 
+instance Category Three where
+    type Arrow Three = PullbackArrow
+    -- type Arrow Three (PullbackDiag a b c) = PullbackArrow
+    id = Id
+    Id . x = x
+    x . Id = x
+
 instance Cospan' c a b => Diagram (PullbackDiag a b c) where
-    type Arrow Three (PullbackDiag a b c) = PullbackArrow
     dmap _ _ Id  = id
     dmap _ _ A2C = PbDg . left' . getPbDg
     dmap _ _ B2C = PbDg . right' . getPbDg
