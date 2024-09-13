@@ -203,7 +203,7 @@ instance Category (DiscreteCategory a) where
 data SDiscr j where SDC :: Sing a -> SDiscr (DC a)
 type instance Sing = SDiscr
 
-newtype DiscreteDiagram (fam :: a -> Type) (idx :: DiscreteCategory a) = DD (fam (GetDC idx))
+newtype DiscreteDiagram (fam :: a -> Type) (idx :: DiscreteCategory a) = DD { getDD :: fam (GetDC idx) }
 
 instance Diagram (DiscreteDiagram fam) where
     dmap _ _ Refl = id
@@ -320,14 +320,13 @@ instance Category (ListIndex xs) where
 instance Diagram (AtIndex xs) where
     dmap _ _ Refl = id
 
--- instance Cone (HList xs) (AtIndex xs) where
--- instance Cone (HList xs) (AtIndex xs) where
---     indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
---     indexCone i xs = AI $ grabIndex i xs
+instance Cone (HList xs) (AtIndex xs) where
+    indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
+    indexCone i xs = AI $ grabIndex i xs
 
-instance Cone (HList xs) (DiscreteDiagram (AtIndex xs)) where
-    indexCone :: forall (j :: DiscreteCategory (ListIndex xs)).  Sing j -> HList xs -> DiscreteDiagram (AtIndex xs) j
-    indexCone (SDC i) xs = DD $ AI $ grabIndex i xs
+-- instance Cone (HList xs) (DiscreteDiagram (AtIndex xs)) where
+--     indexCone :: forall (j :: DiscreteCategory (ListIndex xs)).  Sing j -> HList xs -> DiscreteDiagram (AtIndex xs) j
+--     indexCone (SDC i) xs = DD $ AI $ grabIndex i xs
 
 data SomeDepCone1 (d :: forall k -> j k -> Type) a = forall c. Cone (c a) (d a) => MkSomeDepCone1 (c a)
 type SomeHlistCone xs = SomeDepCone1 AtIndex
@@ -385,6 +384,9 @@ coneToHList1 f =  case lengthSing @xs of
 instance KnownLength xs => Limit (HList xs) (AtIndex xs) where
     getLimit :: Cone n' (AtIndex xs) => n' -> HList xs
     getLimit c = coneToHList1 (\j -> indexCone j c)
+-- instance KnownLength xs => Limit (HList xs) (DiscreteDiagram (AtIndex xs)) where
+--     getLimit :: Cone n' (DiscreteDiagram (AtIndex xs)) => n' -> HList xs
+--     getLimit c = coneToHList1 (\j -> getDD $ indexCone (SDC j) c)
 
 class Iso a b where
     cast :: a -> b
