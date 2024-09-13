@@ -401,43 +401,43 @@ instance (Limit n d, Limit n' d) => Iso (LimitIso n d) (LimitIso n' d) where
     cast = LimitIso . getLimit . getLimitIso
     cocast = LimitIso . getLimit . getLimitIso
 
-newtype Bool' = MkBool' Bool
-type family GetBool' (b :: Bool') where
-    GetBool' (MkBool' x) = x
+newtype Twostar = MkTwostar Bool
+type family GetTwostar (b :: Twostar) where
+    GetTwostar (MkTwostar x) = x
 
--- newtype SBool' b = MkSBool' (SBool (GetBool' b))
-data SBool' b where
-    SFalse' :: SBool' (MkBool' False)
-    STrue'  :: SBool' (MkBool' True)
+-- newtype STwostar b = MkSTwostar (SBool (GetTwostar b))
+data STwostar b where
+    SFalse' :: STwostar (MkTwostar False)
+    STrue'  :: STwostar (MkTwostar True)
 
-type instance Sing = SBool'
+type instance Sing = STwostar
 
--- newtype Twostar a b = Twostar a
-newtype Twostar a b (j :: Bool') = Twostar { getTwostar :: DSpan' a b (GetBool' j) }
+-- newtype TwostarDiag a b = TwostarDiag a
+newtype TwostarDiag a b (j :: Twostar) = TwostarDiag { getTwostar :: DSpan' a b (GetTwostar j) }
 
-instance Category Bool' where
-    type Arrow Bool' = Const2 ()
+instance Category Twostar where
+    type Arrow Twostar = Const2 ()
     id = Const2 ()
     _ . _ = Const2 ()
-    -- type Arrow Bool (Twostar a b) = Const2 ()
-instance Iso a b => Diagram (Twostar a b) where
+    -- type Arrow Bool (TwostarDiag a b) = Const2 ()
+instance Iso a b => Diagram (TwostarDiag a b) where
 
-    dmap :: SBool' j -> SBool' k -> Const2 () j k -> Twostar a b (j) -> Twostar a b (k)
-    dmap STrue'  STrue'  (Const2 ()) (Twostar ts) = Twostar $ ts
-    dmap STrue'  SFalse' (Const2 ()) (Twostar ts) = Twostar $ cocast ts
-    dmap SFalse' STrue'  (Const2 ()) (Twostar ts) = Twostar $ cast ts
-    dmap SFalse' SFalse' (Const2 ()) (Twostar ts) = Twostar $ ts
+    dmap :: STwostar j -> STwostar k -> Const2 () j k -> TwostarDiag a b (j) -> TwostarDiag a b (k)
+    dmap STrue'  STrue'  (Const2 ()) (TwostarDiag ts) = TwostarDiag $ ts
+    dmap STrue'  SFalse' (Const2 ()) (TwostarDiag ts) = TwostarDiag $ cocast ts
+    dmap SFalse' STrue'  (Const2 ()) (TwostarDiag ts) = TwostarDiag $ cast ts
+    dmap SFalse' SFalse' (Const2 ()) (TwostarDiag ts) = TwostarDiag $ ts
 
 data Limit2Star a b = L2S a
 
-instance Iso a b => Cone (Limit2Star a b) (Twostar a b) where
-    indexCone :: Iso a b => Sing j -> (Limit2Star a b) -> Twostar a b j
-    indexCone idx (L2S a) = dmap SFalse' idx (Const2 ()) (Twostar a)
-    -- indexCone SFalse (L2S a) = Twostar a
-    -- indexCone STrue  (L2S a) = Twostar $ cast a
+instance Iso a b => Cone (Limit2Star a b) (TwostarDiag a b) where
+    indexCone :: Iso a b => Sing j -> (Limit2Star a b) -> TwostarDiag a b j
+    indexCone idx (L2S a) = dmap SFalse' idx (Const2 ()) (TwostarDiag a)
+    -- indexCone SFalse (L2S a) = TwostarDiag a
+    -- indexCone STrue  (L2S a) = TwostarDiag $ cast a
 
-instance Iso a b => Limit (Limit2Star a b) (Twostar a b) where
-    getLimit :: (Cone n' (Twostar a b)) => n' -> Limit2Star a b
+instance Iso a b => Limit (Limit2Star a b) (TwostarDiag a b) where
+    getLimit :: (Cone n' (TwostarDiag a b)) => n' -> Limit2Star a b
     getLimit other = L2S $ getTwostar $ indexCone SFalse' other
 
 data Three = A | B | C
