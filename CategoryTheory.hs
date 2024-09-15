@@ -18,19 +18,13 @@ import Prelude hiding (fst, snd, id, (.))
 import Data.Void (Void, absurd)
 import Data.Kind (Type, Constraint)
 import Data.Type.Equality ( type (:~:)(Refl) )
-import Control.Category
+import Control.Category ( Category(..) )
+-- import Data.Typeable (TypeRep)
 -- import GHC.Internal.TypeLits (KnownNat)
 -- import Data.Data (Proxy(Proxy))
 -- import Data.Functor.Const (Const)
 -- import Data.Singletons
 
-
--- type Arrow j :: j -> j -> Type
--- instance Category Type where
---     -- type Obj Type = Type
---     type Arrow Type = (->)
---     id = Prelude.id
---     (.) = (Prelude..)
 
 -- No laws
 class Span s where
@@ -65,6 +59,9 @@ lawProduct val' = fst val == fst val' && snd val == snd val'
 
 -- Additional law: Product should be unique (up to isomorphism)
 -- productUnique :: forall s s' a b. (Eq a, Eq b, Span s', Product s) => (s' a b -> s a b) -> Bool
+
+class (Span' s a b) => Product' s a b | s -> a , s -> b where
+    pFactor' :: (Span' s' a b) => s' -> s
 
 instance Product (,) where
     pFactor val' = (fst val', snd val')
@@ -209,6 +206,29 @@ instance (forall a b. Cone (c a b) (DSpan a b)) => Span (Conespan c) where
   snd :: forall a b. Cone (c a b) (DSpan a b) => Conespan c a b -> b
   snd = unDS . indexCone @(c a b) @(DSpan a b) STrue . unCs
 
+newtype Conespan' c a b = Cs' {unCs' :: c}
+instance Cone c (DSpan a b) => Span' (Conespan' c a b) a b where
+    fst' = unDS . indexCone SFalse . unCs'
+    snd' = unDS . indexCone STrue . unCs'
+--   fst :: forall a b. Cone (c a b) (DSpan a b) => Conespan c a b -> a
+--   fst = unDS . indexCone @(c a b) @(DSpan a b) SFalse . unCs
+--   snd :: forall a b. Cone (c a b) (DSpan a b) => Conespan c a b -> b
+--   snd = unDS . indexCone @(c a b) @(DSpan a b) STrue . unCs
+
+instance (forall a b. Limit (c a b) (DSpan a b)) => Product (Conespan c) where
+    pFactor :: (Limit (c a b) (DSpan a b), Span s') => s' a b -> Conespan c a b
+    pFactor = Cs . getLimit . SpanCone
+
+-- instance (Limit c (DSpan a b)) => Product' (Conespan' c a b) a b where
+--     pFactor' :: (Limit c (DSpan a b), Span' s' a b) => s' -> Conespan' c a b
+--     pFactor' x = Cs' . pFactor' $ Cs (_ , _)
+
+instance Product c => Limit (SpanCone c a b) (DSpan a b) where
+    getLimit :: (Product c, Cone n' (DSpan a b)) => n' -> SpanCone c a b
+    getLimit n' = SpanCone . pFactor $ (unDS $ indexCone SFalse n' , unDS $ indexCone STrue n')
+
+-- instance Limit c (DSpan a b) => Product (Conespan' c) where
+
 data SomeCone (d :: j -> Type) = forall c. Cone c d => MkSomeCone c
 data SomeCone1 (d :: k -> j -> Type) (a :: k) = forall c. Cone (c a) (d a) => MkSomeCone1 (c a)
 data SomeCone2 (d :: k -> k -> j -> Type) a b = forall c. Cone (c a b) (d a b) => MkSomeCone2 (c a b)
@@ -303,17 +323,8 @@ instance Cone (HList xs) (AtIndex xs) where
     indexCone :: forall (j :: ListIndex xs). SListIndex j -> HList xs -> AtIndex xs j
     indexCone i xs = AI $ grabIndex i xs
 
--- instance Cone (HList xs) (DiscreteDiagram (AtIndex xs)) where
---     indexCone :: forall (j :: DiscreteCategory (ListIndex xs)).  Sing j -> HList xs -> DiscreteDiagram (AtIndex xs) j
---     indexCone (SDC i) xs = DD $ AI $ grabIndex i xs
-
 data SomeDepCone1 (d :: forall k -> j k -> Type) a = forall c. Cone (c a) (d a) => MkSomeDepCone1 (c a)
 type SomeHlistCone xs = SomeDepCone1 AtIndex
-
--- instance Cone (HList xs) (DiscreteDiagram (foo :: ListIndex xs -> Type)) where
---     indexCone :: forall (xs :: [*]) (foo :: ListIndex xs -> *) (j :: ListIndex xs).  Sing j -> HList xs -> DiscreteDiagram foo j
---     indexCone SHere      (HCons x xs) = DD $ _
---     indexCone (SThere i) (HCons x xs)= _
 
 class Cone n d => Limit n d | n -> d where
     getLimit :: Cone n' d => n' -> n
@@ -379,6 +390,17 @@ newtype LimitIso n d = LimitIso { getLimitIso :: n }
 instance (Limit n d, Limit n' d) => Iso (LimitIso n d) (LimitIso n' d) where
     cast = LimitIso . getLimit . getLimitIso
     cocast = LimitIso . getLimit . getLimitIso
+
+newtype WrapLimit n = WrapLimit n
+
+-- instance (Limit (n a b) (DSpan a b), Limit (n a b) (DSpan a b), Product s) => Iso (WrapLimit (n a b)) (s a b) where
+--     cast :: (Limit (n a b) (DSpan a b), Product s) => WrapLimit (n a b) -> s a b
+--     -- cast (WrapLimit x) = pFactor (unDS $ indexCone SFalse x , unDS $ indexCone STrue x)
+--     -- cast (WrapLimit x) = _ $ getLimit $ Cs' $ (_, _)
+--     cast (WrapLimit x) = unCs' $ pFactor' $ Cs' x
+--     cocast :: (Limit (n a b) (DSpan a b), Product s) => s a b -> WrapLimit (n a b)
+--     -- cocast x = WrapLimit . getLimit . SpanCone $ (fst x, snd x)
+--     cocast = WrapLimit . getLimit . SpanCone
 
 -- newtype TwostarDiag a b = TwostarDiag a
 newtype TwostarDiag a b (j :: Bool) = TwostarDiag { getTwostar :: DSpan' a b j }
@@ -477,3 +499,106 @@ instance PullbackCone n a b c => Cone (PbCn n a b c) (PullbackDiag a b c) where
 instance PullbackCone n a b c => Limit (PbCn n a b c) (PullbackDiag a b c) where
     getLimit :: (PullbackCone n a b c, Cone n' (PullbackDiag a b c)) => n' -> PbCn n a b c
     getLimit nn = PbCn $ cons (getPbDg $ indexCone SA nn) (getPbDg $ indexCone SB nn)
+
+newtype UnitPullback a = UPb { unUPb :: a}
+
+-- instance Cone (UnitPullback a) (PullbackDiag a b (Either a b)) where
+-- instance PullbackCone (UnitPullback a) a a (Either a a) where
+--   na = unUPb
+--   nb = unUPb
+--   cons x y = _
+
+newtype Lengths a b = Lengths Int
+instance Cospan' (Lengths a b) [a] [b] where
+    left' = Lengths . length
+    right' = Lengths . length
+
+class HasDefault a where
+    def :: a
+
+instance (HasDefault a, HasDefault b) => Cone (Lengths a b) (PullbackDiag [a] [b] (Lengths a b)) where
+    indexCone SA (Lengths lns) = PbDg $ replicate lns def
+    indexCone SB (Lengths lns) = PbDg $ replicate lns def
+    indexCone SC (Lengths lns) = PbDg $ Lengths lns
+
+-- Law abiding cone, but not law-abiding limit. The limit fails for indexCone SA x /= indexCone SA (getLimit x) if a /= ()
+instance (HasDefault a, HasDefault b) => Limit (Lengths a b) (PullbackDiag [a] [b] (Lengths a b)) where
+    getLimit :: (Cone n' (PullbackDiag [a] [b] (Lengths a b))) => n' -> Lengths a b
+    getLimit n = getPbDg $ indexCone SC n
+
+newtype IdWrap a b = IdW a
+newtype IdB a f = IdB (f a)
+instance Applicative f => Cospan' (IdB a f) a (f a) where
+    left' = IdB . pure
+    right' = IdB . id
+instance Applicative f => Cone (IdWrap a f) (PullbackDiag a (f a) (IdB a f)) where
+    indexCone SA (IdW x) = PbDg $ id x
+    indexCone SB (IdW x) = PbDg $ pure x
+    indexCone SC (IdW x) = PbDg $ left' x
+instance Applicative f => Limit (IdWrap a f) (PullbackDiag a (f a) (IdB a f)) where
+    getLimit = IdW . getPbDg . indexCone SA
+
+-- data EmptyCat :: Void -> Void -> Type where
+
+-- instance Category EmptyCat where
+--   id =
+--   (.) = _
+
+data EmptyDiagram (x :: Void) = EmptyDiagram
+
+data SVoid (v :: Void) where
+type instance Sing = SVoid
+
+sabsurd :: SVoid v -> a
+sabsurd x = case x of {}
+
+instance Diagram EmptyDiagram where
+    type Arrow EmptyDiagram = (:~:)
+    dmap :: Sing ja -> Sing jb -> Arrow EmptyDiagram ja jb -> EmptyDiagram ja -> EmptyDiagram jb
+    dmap = sabsurd
+
+data Terminal t = Terminal t
+instance Cone (Terminal t) EmptyDiagram where
+    indexCone sj = sabsurd sj
+
+instance Limit (Terminal ()) EmptyDiagram where
+    getLimit :: Cone n' EmptyDiagram => n' -> Terminal ()
+    getLimit _ = Terminal ()
+
+
+
+
+-- * Functors from non-hask categories to non-hask categories
+
+class (Category c, Category c') => CFunctor (c :: a -> a -> Type) (c' :: b -> b -> Type) (f :: a -> b) | f -> c , f -> c' where
+    cmap :: Sing x -> Sing y -> c x y -> c' (f x) (f y)
+
+data SType :: Type -> Type
+type instance Sing = SType
+
+-- data EmptyCat :: Void -> Void -> Type where
+--     NoMap :: forall (v :: Void). EmptyCat v v
+
+-- instance Category EmptyCat where
+--   id = _
+--   (.) = _
+
+instance Functor f => CFunctor (->) (->) f where
+    cmap _ _ = fmap
+
+
+data family EmptyDiagC :: q -> Void -> a
+
+-- data instance EmptyDiagC q v
+
+instance Category x => CFunctor (:~:) x (EmptyDiagC x) where
+    cmap v = sabsurd v
+
+class (Category c) => CSpan a (c :: a -> a -> Type) (s :: a) (x :: a) (y :: a) where
+    cfst :: c s x
+    csnd :: c s y
+
+class (Category c, CSpan a c s x y) => CProd a (c :: a -> a -> Type) (s :: a) (x :: a) (y :: a) where
+    cProd :: (CSpan a c s' x y) => c s' s
+
+-- class CCone j ()
