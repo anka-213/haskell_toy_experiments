@@ -2,7 +2,7 @@
 -- Inspired by these blog posts:
 -- https://kavigupta.org/2016/05/08/Haskell-Classes-For-Products-And-Coproducts/
 -- https://kavigupta.org/2016/05/10/A-Haskell-Class-For-Limits/
-{-# LANGUAGE AllowAmbiguousTypes #-}
+-- {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,6 +12,8 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE RequiredTypeArguments #-}
+{-# LANGUAGE TypeAbstractions #-}
 
 import Prelude hiding (fst, snd, id, (.))
 -- import Prelude qualified
@@ -51,10 +53,10 @@ class (Span s) => Product s where
     pFactor :: (Span s') => s' a b -> s a b
 
 
-lawProduct :: forall s s' a b. (Eq a, Eq b, Span s', Product s) => s' a b -> Bool
-lawProduct val' = fst val == fst val' && snd val == snd val'
+lawProduct :: forall s -> forall s' a b. (Eq a, Eq b, Span s', Product s) => s' a b -> Bool
+lawProduct s @_ @a @b val' = fst val == fst val' && snd val == snd val'
     where
-    val :: s a b
+    val :: forall. s a b
     val = pFactor val'
 
 -- Additional law: Product should be unique (up to isomorphism)
@@ -109,15 +111,15 @@ class (Cospan s) => Coproduct s where
     cpFactor :: (Cospan s') => s a b -> s' a b
 
 -- This also needs to be unique
-lawCoproduct :: forall s s' a b. (Eq (s' a b), Cospan s', Coproduct s) => a -> b -> Bool
-lawCoproduct a b = cpFactor lhsA == rhsA && cpFactor lhsB == rhsB
+lawCoproduct :: forall s s' -> forall a b. (Eq (s' a b), Cospan s', Coproduct s) => a -> b -> Bool
+lawCoproduct s s' @a @b x y = cpFactor lhsA == rhsA && cpFactor lhsB == rhsB
     where
     rhsA, rhsB :: s' a b
-    rhsA = left a
-    rhsB = right b
+    rhsA = left x
+    rhsB = right y
     lhsA, lhsB :: s a b
-    lhsA = left a
-    lhsB = right b
+    lhsA = left x
+    lhsB = right y
 
 instance Coproduct Either where
     cpFactor (Left a) = left a
@@ -141,7 +143,7 @@ instance Coproduct ChurchCoproduct where
 
 -- Functor from subset of Hask to Hask
 class ConstrainedFunctor (c :: Type -> Constraint) f where
-    cfmap :: forall a b. (c a, c b) => (a -> b) -> f a -> f b
+    cfmap :: forall a b proxy. (c a, c b) => proxy c -> (a -> b) -> f a -> f b
 
 -- Diagrams are defined as functors from an index category to Hask.
 -- j is the (set of objects of the) index category. Singletons of j are used to pattern match on objects.
@@ -332,8 +334,8 @@ class Cone n d => Limit n d | n -> d where
 getSomeLimit :: Limit n d => SomeCone d -> n
 getSomeLimit (MkSomeCone x) = getLimit x
 
-limitLaw1 :: forall a d n n'. (Eq (d a), Cone n' d, Limit n d) => Sing a -> n' -> Bool
-limitLaw1 a x = indexCone a (getLimit @n x) == indexCone a x
+limitLaw1 :: forall n -> forall a d n'. (Eq (d a), Cone n' d, Limit n d) => Sing a -> n' -> Bool
+limitLaw1 n a x = indexCone a (getLimit @n x) == indexCone a x
 
 -- The limit morphism should be unique
 -- Assumes that lim2 also follows limitLaw1
@@ -595,10 +597,10 @@ instance Category x => CFunctor (:~:) x (EmptyDiagC x) where
     cmap v = sabsurd v
 
 class (Category c) => CSpan a (c :: a -> a -> Type) (s :: a) (x :: a) (y :: a) where
-    cfst :: c s x
-    csnd :: c s y
+    cfst :: proxy y -> c s x
+    csnd :: pory x -> c s y
 
 class (Category c, CSpan a c s x y) => CProd a (c :: a -> a -> Type) (s :: a) (x :: a) (y :: a) where
-    cProd :: (CSpan a c s' x y) => c s' s
+    cProd :: (CSpan a c s' x y) => proxy x -> proxy y -> c s' s
 
 -- class CCone j ()
