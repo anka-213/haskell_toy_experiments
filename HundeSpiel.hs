@@ -338,7 +338,7 @@ main = do
 --solutionsTrace = map fst <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
 
 -- | Trace all the step of the execution, including all backtacking
--- We backtrack a total of 503 times when trying to find all solutions
+-- We backtrack a total of 224 times when trying to find all solutions
 traceSolutionFull :: IO ()
 traceSolutionFull = mapM_ (traceSolutionStep bestOrder) selectMiddle
 
@@ -373,10 +373,37 @@ generateTree (f:fs) x = Node x $ generateTree fs <$> f x
 mkSolutionTree :: [Tile -> Board -> [Board]] -> [Tree (Board, TileSet)]
 mkSolutionTree positions = generateTree (insertTile <$> positions) <$> selectMiddle
 
-{-
->>> printSolutionTree [topMid, topLeft, midLeft]
+-- We explore a total of 473 partial solutions, of which 2 are actual solutions
+-- >>> length $ mkSolutionTreeNr bestOrder
+-- 473
 
--}
+-- In total, we try out 6852 positions, included those discarded because they didn't match
+-- >>> sum $ calcUnused $ mkSolutionTreeNr bestOrder
+-- 6852
+mkSolutionTreeNr :: [Tile -> Board -> [Board]] -> Tree Int
+-- mkSolutionTreeNr = Node 9 . (fmap . fmap) (length . expand . snd) . mkSolutionTree
+mkSolutionTreeNr = Node (length initialTiles `div` 4) . (fmap . fmap) (length . snd) . mkSolutionTree
+
+-- | The number of potential solutions that were discarded because the tile didn't match what was already placed
+calcUnused :: Tree Int -> Tree Int
+calcUnused (Node x ts) = Node (4*x - length ts) $ calcUnused <$> ts
+
+-- Print all the partial solutions as a tree. The leaves are cases when we can't add more tiles
 printSolutionTree :: [Tile -> Board -> [Board]] -> String
-printSolutionTree positions =  Data.Tree.drawTree . Node "9" $ fmap (show . length . expand . snd) <$> mkSolutionTree positions
+printSolutionTree =  Data.Tree.drawTree . fmap show . calcUnused . mkSolutionTreeNr
 -- printSolutionTree positions =  Data.Tree.drawForest $ fmap (show . length . expand . snd) <$> mkSolutionTree positions
+
+truncateTree :: Int -> Tree a -> Tree a
+truncateTree 0 (Node x _) = Node x []
+truncateTree n (Node x xs) = Node x $ truncateTree (n-1) <$> xs
+
+
+-- The starting position does matter slightly even if it's one of the optimal positions
+-- >>> [(length x, sum x) | let full = mkSolutionTreeNr $ take 8 $ drop 0 $ cycle bestOrder, n <- [0..8], let x = calcUnused $ truncateTree n full]
+-- >>> [(length x, sum x) | let full = mkSolutionTreeNr $ take 8 $ drop 2 $ cycle bestOrder, n <- [0..8], let x = calcUnused $ truncateTree n full]
+-- >>> [(length x, sum x) | let full = mkSolutionTreeNr $ take 8 $ drop 4 $ cycle bestOrder, n <- [0..8], let x = calcUnused $ truncateTree n full]
+-- >>> [(length x, sum x) | let full = mkSolutionTreeNr $ take 8 $ drop 6 $ cycle bestOrder, n <- [0..8], let x = calcUnused $ truncateTree n full]
+-- [(1,8),(9,228),(31,762),(121,2640),(171,3522),(319,5626),(379,6266),(458,6815),(471,6854)]
+-- [(1,8),(9,228),(45,1092),(176,3805),(241,4960),(375,6846),(428,7405),(477,7744),(494,7795)]
+-- [(1,8),(9,228),(41,1004),(131,2874),(181,3756),(273,5056),(323,5590),(423,6274),(440,6325)]
+-- [(1,8),(9,228),(35,850),(99,2174),(138,2859),(259,4550),(302,5003),(373,5488),(393,5548)]
