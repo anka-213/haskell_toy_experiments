@@ -4,6 +4,7 @@ import Data.List
 import Control.Monad (guard)
 import Control.Monad.State ( StateT(StateT) )
 import Control.Applicative (Alternative(empty))
+import System.Environment (getArgs)
 
 -- https://blog.ploeh.dk/2024/10/03/das-verflixte-hunde-spiel/
 
@@ -304,9 +305,19 @@ prettyBoard (T a b c) = concatMap prettyRow [a,b,c]
 -- * Main
 
 main :: IO ()
--- main = mapM_ putStrLn  $ intercalate ["",""] $ map prettyBoard solutions
--- main = mapM_ putStrLn  $ intercalate ["",""] $ map (prettyBoard.head) solutionsTrace
-main = traceSolutionFull
+main = do
+    args <- getArgs
+    case args of
+        ["solve"] -> mapM_ putStrLn  $ intercalate ["",""] $ map prettyBoard solutions
+        ["simpleTrace"] -> mapM_ putStrLn  $ intercalate ["",""] $ map (prettyBoard.head) solutionsTrace
+        ["fullTrace"] -> traceSolutionFull
+        _ -> putStrLn $ unlines
+          ["Usage: ./HundeSpiel (solve|simpleTrace|fullTrace)"
+          , ""
+          , "solve: print all solutions"
+          , "simpleTrace: print the first solution for each step"
+          , "fullTrace: print the full trace of each board position we are trying"
+          ]
 
 --solutionsTrace = map fst <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
 
