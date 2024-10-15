@@ -5,6 +5,7 @@ import Control.Monad (guard)
 import Control.Monad.State ( StateT(StateT) )
 import Control.Applicative (Alternative(empty))
 import System.Environment (getArgs)
+import Data.Tree
 
 -- https://blog.ploeh.dk/2024/10/03/das-verflixte-hunde-spiel/
 
@@ -68,6 +69,9 @@ sorted = sort $ minimum . rotations . fst <$> initialTiles
 count :: Eq a => [a] -> [(a,Int)]
 count xs = [(head x, length x) | x <- group xs]
 
+expand :: [(a, Int)] -> [a]
+expand = concatMap $ uncurry (flip replicate)
+
 -- >>> duplicateTiles
 -- [Tile {top = (Brown,Head), right = (Spotted,Head), bottom = (Grey,Tail), left = (Umber,Tail)}]
 duplicateTiles :: [Tile]
@@ -126,7 +130,7 @@ matchesMb a (Just b) = matches a b
 
 topLeft :: Tile -> Board -> [Board]
 topLeft tl (T (T _tl tm tr) (T ml mm mr) bot)
-  | matchesMb (right  tl) (left <$> tr)
+  | matchesMb (right  tl) (left <$> tm)
   , matchesMb (bottom tl) (top  <$> ml)
   = pure (T (T (Just tl) tm tr) (T ml mm mr) bot)
   | otherwise = empty
@@ -150,7 +154,7 @@ midLeft :: Tile -> Board -> [Board]
 midLeft ml (T (T tl tm tr) (T _ml mm mr) (T bl bm br))
   | matchesMb (right  ml) (left   <$> mm)
   , matchesMb (top    ml) (bottom <$> tl)
-  , matchesMb (bottom ml) (top    <$> tl)
+  , matchesMb (bottom ml) (top    <$> bl)
   = pure (T (T tl tm tr) (T (Just ml) mm mr) (T bl bm br))
   | otherwise = empty
 
@@ -158,7 +162,7 @@ midRight :: Tile -> Board -> [Board]
 midRight mr' (T (T tl tm tr) (T ml mm _mr) (T bl bm br))
   | matchesMb (left   mr') (right  <$> mm)
   , matchesMb (top    mr') (bottom <$> tr)
-  , matchesMb (bottom mr') (top    <$> tr)
+  , matchesMb (bottom mr') (top    <$> br)
   = pure (T (T tl tm tr) (T ml mm mr) (T bl bm br))
   | otherwise = empty
   where mr = Just mr'
@@ -188,6 +192,7 @@ botRight br' (T (T tl tm tr) (T ml mm mr) (T bl bm _br))
   | otherwise = empty
   where br = Just br'
 
+-- In order to insert a new tile, we first choose a tile, then we rotate it and finally we check if it can be inserted
 insertTile :: (Tile -> Board -> [Board]) -> (Board, TileSet) -> [(Board, TileSet)]
 insertTile inserter (board, tiles) = do
     (newTile, newTileSet) <- chooseTile tiles
@@ -202,14 +207,22 @@ insertTile inserter (board, tiles) = do
 -- >>> length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle [midLeft, topLeft, topRight]
 -- >>> length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle [botLeft, topLeft, topRight]
 -- >>> length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle [midLeft, topMid, topLeft, midRight, topRight, botMid, botLeft, botRight]
--- [8,26,62,125]
+-- >>> sum $ length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle [midLeft, topMid, topLeft, midRight, topRight, botMid, botLeft, botRight]
+-- >>> length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
+-- >>> sum $ length <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
+-- [8,26,62,39]
 -- [8,26,62,223]
 -- [8,26,64,1388]
 -- [8,228,5712,123648]
--- [8,26,62,125,391,130,235,43,2]
+-- [8,26,62,39,117,43,85,17,2]
+-- 399
+-- [8,22,90,50,148,60,79,13,2]
+-- 472
 
+-- One of the many possible optimal orders. The crucial thing is that we maximize the number of constraints as early as possible
 bestOrder :: [Tile -> Board -> [Board]]
-bestOrder = [midLeft, topMid, topLeft, midRight, topRight, botMid, botLeft, botRight]
+-- bestOrder = [midLeft, topMid, topLeft, midRight, topRight, botMid, botLeft, botRight]
+bestOrder = [topMid, topRight, midRight, botRight, botMid, botLeft, midLeft, topLeft]
 
 -- rotateBoard :: Board -> Board
 
@@ -217,7 +230,7 @@ solutionsTrace :: [[Board]]
 solutionsTrace = map fst <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
 
 solutions :: [Board]
-solutions = map fst $ foldl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
+solutions = map fst $ foldl' (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
 -- >>> prettyBoard $ solutions !! 0
 -- ["             Brown head                            Grey head                             Brown head             "
 -- ," Umber tail             Spotted head  Spotted tail             Umber head    Umber tail             Spotted head"
@@ -309,14 +322,17 @@ main = do
     args <- getArgs
     case args of
         ["solve"] -> mapM_ putStrLn  $ intercalate ["",""] $ map prettyBoard solutions
-        ["simpleTrace"] -> mapM_ putStrLn  $ intercalate ["",""] $ map (prettyBoard.head) solutionsTrace
+        ["simpleTrace"] -> do
+            mapM_ putStrLn  $ intercalate ["",""] $ [("We have " ++ show (length sols) ++ " partial solutions. For example:") : prettyBoard (head sols) | sols <- solutionsTrace]
         ["fullTrace"] -> traceSolutionFull
+        ["showTree"] -> putStrLn $ printSolutionTree bestOrder
         _ -> putStrLn $ unlines
-          ["Usage: ./HundeSpiel (solve|simpleTrace|fullTrace)"
+          ["Usage: ./HundeSpiel (solve|simpleTrace|fullTrace|showTree)"
           , ""
           , "solve: print all solutions"
           , "simpleTrace: print the first solution for each step"
           , "fullTrace: print the full trace of each board position we are trying"
+          , "showTree: print a tree of all the partial solutions. The number indicates how many tiles are missing"
           ]
 
 --solutionsTrace = map fst <$> scanl (\st pos -> st >>= insertTile pos) selectMiddle bestOrder
@@ -347,4 +363,20 @@ traceSolutionStep (pos : poss) (board, tileset) = do
       mapM_ (traceSolutionStep poss) nextStep
 
 mkBanner :: String -> String
-mkBanner str = "\n" ++ ('='<$ str) ++ "\n" ++ str ++ "\n" ++ ('>'<$ str) ++ "\n"
+mkBanner str = "\n" ++ ('='<$ str) ++ "\n" ++ str ++ "\n" ++ ('='<$ str) ++ "\n"
+
+
+generateTree :: [a -> [a]] -> a -> Tree a
+generateTree [] x = Node x []
+generateTree (f:fs) x = Node x $ generateTree fs <$> f x
+
+mkSolutionTree :: [Tile -> Board -> [Board]] -> [Tree (Board, TileSet)]
+mkSolutionTree positions = generateTree (insertTile <$> positions) <$> selectMiddle
+
+{-
+>>> printSolutionTree [topMid, topLeft, midLeft]
+
+-}
+printSolutionTree :: [Tile -> Board -> [Board]] -> String
+printSolutionTree positions =  Data.Tree.drawTree . Node "9" $ fmap (show . length . expand . snd) <$> mkSolutionTree positions
+-- printSolutionTree positions =  Data.Tree.drawForest $ fmap (show . length . expand . snd) <$> mkSolutionTree positions
